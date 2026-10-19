@@ -52,7 +52,7 @@ from torch.utils.data import DataLoader
 from transformers import AutoTokenizer, LlamaConfig, LlamaForCausalLM
 
 try:
-    from modeling_vscale import VscaleForCausalLM
+    from modeling_vscale_mode import VscaleForCausalLM
 except Exception:
     VscaleForCausalLM = None
 
@@ -311,6 +311,7 @@ def build_model_from_saved_args(saved_args: Dict) -> torch.nn.Module:
             raise ImportError("modeling_vscale.VscaleForCausalLM is unavailable, but checkpoint requires vscale.")
         config.model_type = "vscale"
         config.v_scale_learnable = get_arg(saved_args, "v_scale_learnable", True)
+        config.v_scale_mode = get_arg(saved_args, "v_scale_mode", "full")
         model = VscaleForCausalLM(config)
     else:
         raise ValueError(f"Unknown model_type in checkpoint args: {model_type}")
@@ -356,7 +357,7 @@ def _normalize_state_dict_keys(state_dict: dict) -> dict:
 def load_model_from_new_checkpoint(ckpt_path: str, device: torch.device) -> Tuple[torch.nn.Module, int, Dict]:
     payload = torch.load(ckpt_path, map_location="cpu")
 
-    # train.py format
+    # new train.py format
     if isinstance(payload, dict) and "model" in payload:
         raw_state_dict = payload["model"]
         train_state = payload.get("train_state", {})

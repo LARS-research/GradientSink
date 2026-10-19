@@ -2,6 +2,11 @@
 
 This repository contains the training and evaluation code for the V-scale experiments in the submission. It is meant to be used as a reproducibility package: train Llama-style baseline/V-scale models, inspect checkpoints, convert checkpoints to Hugging Face format, quantize models, and run downstream evaluations.
 
+## News
+
+- Our paper has been accepted by [NeurIPS 2026](https://neurips.cc/virtual/2026/loc/sydney/poster/151217). See also [OpenReview](https://openreview.net/forum?id=c49EUKrp1G).
+- The arXiv page is [https://arxiv.org/abs/2603.17771](https://arxiv.org/abs/2603.17771).
+
 ## Start Here
 
 If you are new to this codebase, follow this order:

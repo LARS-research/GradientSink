@@ -16,6 +16,8 @@ MODEL_TITLE = "0.3B"
 
 BASELINE_RUN_DIR = f"evaluate/outputs/extreme_token_probe/{MODEL_TAG}_baseline"
 VSCALE_RUN_DIR   = f"evaluate/outputs/extreme_token_probe/{MODEL_TAG}_vscale"
+BACKONLY_RUN_DIR   = f"evaluate/outputs/extreme_token_probe/{MODEL_TAG}_vscale_backonly"
+# BACKONLY_RUN_DIR = None
 
 OUT_DIR = f"evaluate/outputs/extreme_token_probe/{MODEL_TAG}_compare"      # None -> <baseline parent>/compare_final_plots/<MODEL_TAG>
 EXT = "pdf"         # pdf / png / svg
@@ -26,9 +28,11 @@ EPS_KEY = "auto"    # auto / sink_eps_layer_0p3_k / "0.3"
 # Colors and styles
 COLOR_BASELINE = "#0369cf"
 COLOR_VSCALE   = "#fc9630"
+COLOR_BACKONLY = "#03cf69"
 
 MARKER_BASELINE = "o"
 MARKER_VSCALE   = "x"
+MARKER_BACKONLY = "^"
 
 LINESTYLE_TOK0  = "-"
 LINESTYLE_REST  = "--"
@@ -37,6 +41,7 @@ LW_TOK0 = 2.0
 LW_REST = 1.5
 MS_BASELINE = 5
 MS_VSCALE = 5
+MS_BACKONLY = 5
 
 ALPHA_TOK0 = 1.0
 ALPHA_REST = 0.9
@@ -229,7 +234,7 @@ def style_axis(ax):
         spine.set_alpha(0.65)
 
 
-def add_compact_legend(ax):
+def add_compact_legend(ax, include_backonly: bool = False):
     handles = [
         Line2D(
             [0], [0],
@@ -248,6 +253,21 @@ def add_compact_legend(ax):
             markeredgewidth=1.6,
             label="V-scale",
         ),
+    ]
+
+    if include_backonly:
+        handles.append(
+            Line2D(
+                [0], [0],
+                color=COLOR_BACKONLY,
+                marker=MARKER_BACKONLY,
+                linestyle="None",
+                markersize=MS_BACKONLY + 0.5,
+                label="Backward-only",
+            )
+        )
+
+    handles.extend([
         Line2D(
             [0], [0],
             color="black",
@@ -262,7 +282,7 @@ def add_compact_legend(ax):
             linewidth=LW_REST,
             label="mean rest",
         ),
-    ]
+    ])
 
     ax.legend(
         handles=handles,
@@ -286,6 +306,7 @@ def plot_metric_compare_for_pair(
     axis_kind: str,
     title: str,
     ylabel: str,
+    backonly_metrics: Optional[Dict] = None,
 ):
     baseline_lines = extract_group_lines(
         metrics=baseline_metrics,
@@ -299,12 +320,24 @@ def plot_metric_compare_for_pair(
         axis_kind=axis_kind,
         early_window=EARLY_WINDOW,
     )
+    backonly_lines = None
+    if backonly_metrics is not None:
+        backonly_lines = extract_group_lines(
+            metrics=backonly_metrics,
+            metric_getter=metric_getter,
+            axis_kind=axis_kind,
+            early_window=EARLY_WINDOW,
+        )
 
     Lb = baseline_lines["tok0"].numel()
     Lv = vscale_lines["tok0"].numel()
     if Lb != Lv:
         raise RuntimeError(f"Layer number mismatch: baseline={Lb}, vscale={Lv}")
-
+    if backonly_lines is not None:
+        Lbo = backonly_lines["tok0"].numel()
+        if Lb != Lbo:
+            raise RuntimeError(f"Layer number mismatch: baseline={Lb}, backonly={Lbo}")
+    
     x = list(range(Lb))
 
     fig, ax = plt.subplots(figsize=FIGSIZE)
@@ -351,6 +384,27 @@ def plot_metric_compare_for_pair(
         alpha=ALPHA_REST,
     )
 
+    # backward-only (if available)
+    if backonly_lines is not None:
+        ax.plot(
+            x, backonly_lines["tok0"].tolist(),
+            color=COLOR_BACKONLY,
+            linestyle=LINESTYLE_TOK0,
+            linewidth=LW_TOK0,
+            marker=MARKER_BACKONLY,
+            markersize=MS_BACKONLY,
+            alpha=ALPHA_TOK0,
+        )
+        ax.plot(
+            x, backonly_lines["mean_rest"].tolist(),
+            color=COLOR_BACKONLY,
+            linestyle=LINESTYLE_REST,
+            linewidth=LW_REST,
+            marker=MARKER_BACKONLY,
+            markersize=MS_BACKONLY,
+            alpha=ALPHA_REST,
+        )
+
     style_axis(ax)
     ax.set_title(f"{title} ({MODEL_TITLE})", fontsize=11)
     ax.xaxis.set_major_locator(MaxNLocator(integer=True))
@@ -358,7 +412,7 @@ def plot_metric_compare_for_pair(
     ax.set_xlabel("Layer Index")
     ax.set_ylabel(ylabel)
 
-    add_compact_legend(ax)
+    add_compact_legend(ax, include_backonly=backonly_lines is not None)
 
     fig.subplots_adjust(left=0.17, right=1, top=0.94, bottom=0.11)
     # fig.tight_layout()
@@ -377,9 +431,19 @@ def main():
 
     baseline_metrics, baseline_step = load_final_metrics(BASELINE_RUN_DIR)
     vscale_metrics, vscale_step = load_final_metrics(VSCALE_RUN_DIR)
+    backonly_metrics = None
 
     print(f"[info] baseline final step = {baseline_step}")
     print(f"[info] vscale   final step = {vscale_step}")
+
+    if BACKONLY_RUN_DIR is not None:
+        if os.path.isdir(BACKONLY_RUN_DIR):
+            backonly_metrics, backonly_step = load_final_metrics(BACKONLY_RUN_DIR)
+            print(f"[info] backonly final step = {backonly_step}")
+        else:
+            print(f"[warn] backonly run dir not found; skip it: {BACKONLY_RUN_DIR}")
+    else:
+        print("[info] BACKONLY_RUN_DIR is None; plotting baseline and V-scale only")
 
     metric_specs = [
         {
@@ -428,6 +492,7 @@ def main():
             axis_kind=spec["axis_kind"],
             title=spec["title"],
             ylabel=spec["ylabel"],
+            backonly_metrics=backonly_metrics,
         )
 
     print(f"[done] all figures saved to: {out_dir}")

@@ -26,13 +26,17 @@ For V-scale, keep:
 ```bash
 MODEL_TYPE="vscale"
 V_SCALE_LEARNABLE="true"
+V_SCALE_MODE="full"
 ```
+
+`V_SCALE_MODE` can be `"full"` or `"backward_only"`. `"backward_only"` is only used for mechanism check.
 
 For the baseline, use:
 
 ```bash
 MODEL_TYPE="llama"
 V_SCALE_LEARNABLE="true"
+V_SCALE_MODE="full"
 ```
 
 `V_SCALE_LEARNABLE` is ignored by the baseline model.

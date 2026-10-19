@@ -56,9 +56,15 @@ class VRadialScale(nn.Module):
             config,
             sigma_w: float = 0.02,
             learnable: bool = True,
+            mode: str = "full"  # "off", "full", "backward_only"
         ):
         super().__init__()
         self.num_kv_heads = config.num_key_value_heads
+
+        # diagnostic mode
+        if mode not in ("off", "full", "backward_only"):
+            raise ValueError(f"v_scale_mode={mode!r} not in ('off', 'full', 'backward_only')")
+        self.mode = mode
 
         # Dimension-consistent initialization: c0 is per-head (vector) or scalar.
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
@@ -86,6 +92,9 @@ class VRadialScale(nn.Module):
 
     def forward(self, v: torch.Tensor) -> torch.Tensor:
         """v: [B, H_kv, T, D]."""
+        if self.mode == "off":
+            return v
+        
         r2 = (v * v).sum(dim=-1, keepdim=True, dtype=torch.float32)  # [B,H,T,1]
 
         # protect exp theta
@@ -96,8 +105,16 @@ class VRadialScale(nn.Module):
                 c = (self.c0_scalar * torch.exp(self.theta.float())).view(1, -1, 1, 1)
 
             a = r2 / (r2 + c)  # fp32
+        
+        v_scaled = v * a.to(v.dtype)
 
-        return v * a.to(v.dtype)
+        if self.mode == "full":
+            return v_scaled
+
+        if self.mode == "backward_only":
+            return v.detach() + (v_scaled - v_scaled.detach())
+
+        raise RuntimeError(f"Unhandled v_scale_mode={self.mode!r}")
 
 
 class VscaleAttention(nn.Module):
@@ -118,10 +135,12 @@ class VscaleAttention(nn.Module):
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias)
 
         # --- V radial scaling knobs (all getattr-safe) ---
+        self.mode = str(getattr(config, "v_scale_mode", "full")).lower()
         self.v_radial = VRadialScale(
             config=config,
             sigma_w=float(getattr(config, "initializer_range", 0.02)),
             learnable=bool(getattr(config, "v_scale_learnable", False)),
+            mode=self.mode,
         )
 
     def forward(
@@ -222,7 +241,9 @@ class VscalePreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["VscaleDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    _keep_in_fp32_modules = ["v_radial"]
+
+    _keep_in_fp32_modules = None # ["v_radial"]
+    
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -233,6 +254,15 @@ class VscalePreTrainedModel(PreTrainedModel):
         "hidden_states": VscaleDecoderLayer,
         "attentions": VscaleAttention,
     }
+
+    def __init__(self, config: LlamaConfig):
+        super().__init__(config)
+
+        # only when theta is learnable
+        if bool(getattr(config, "v_scale_learnable", False)):
+            self._keep_in_fp32_modules = ["v_radial"]
+        else:
+            self._keep_in_fp32_modules = None
 
 
 class VscaleModel(VscalePreTrainedModel):

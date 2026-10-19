@@ -20,7 +20,7 @@ model_name = "03B_vscale"
 model_path = "evaluate/models/base/" + model_name
 
 
-method = "smoothquant" # awq / gptq / smoothquant / w8a8 / w8a8_stress
+method = "smoothquant" # awq / gptq / smoothquant / w8a8 / w8a8_act / w8a8_stress / w8a8_down_only
 output_dir = f"evaluate/models/{method}/{model_name}_{method}" 
 tokenizer = AutoTokenizer.from_pretrained(model_path)
 
@@ -146,6 +146,35 @@ elif method == "w8a8":
             ignore=["lm_head"],
         )
     ]
+elif method == "w8a8_act":
+    weight_args = {
+        "num_bits": 8,
+        "type": "int",
+        "symmetric": True,
+        "strategy": "channel",
+        "dynamic": False,
+    }
+
+    activation_args = {
+        "num_bits": 8,
+        "type": "int",
+        "symmetric": True,
+        "strategy": "tensor",
+        "dynamic": False,
+    }
+
+    recipe = [
+        QuantizationModifier(
+            config_groups={
+                "linear_w8a8": {
+                    "targets": ["Linear"],
+                    "weights": weight_args,
+                    "input_activations": activation_args,
+                }
+            },
+            ignore=["lm_head"],
+        )
+    ]
 elif method == "w8a8_stress":
     int8_args = {
         "num_bits": 8,
@@ -164,6 +193,35 @@ elif method == "w8a8_stress":
                 }
             },
             ignore=["lm_head"],
+        )
+    ]
+elif method == "w8a8_down_only":
+    weight_args = {
+        "num_bits": 8,
+        "type": "int",
+        "symmetric": True,
+        "strategy": "channel",
+        "dynamic": False,
+    }
+
+    activation_args = {
+        "num_bits": 8,
+        "type": "int",
+        "symmetric": True,
+        "strategy": "tensor",
+        "dynamic": False,
+    }
+
+    recipe = [
+        QuantizationModifier(
+            config_groups={
+                "down_proj_a8_static": {
+                    "targets": [r"re:.*mlp\.down_proj$"],
+                    "weights": weight_args,
+                    "input_activations": activation_args,
+                }
+            },
+            ignore=[],
         )
     ]
 else:

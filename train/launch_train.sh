@@ -27,6 +27,7 @@ RUN_NAME="$(date +%Y%m%d_%H%M%S)"
 # ---- Model selection ----
 MODEL_TYPE="vscale"             # llama or vscale
 V_SCALE_LEARNABLE="true"        # only meaningful when MODEL_TYPE=vscale
+V_SCALE_MODE="full"             # only meaningful when MODEL_TYPE=vscale
 
 # ---- Training hyperparameters ----
 SEED=42
@@ -138,6 +139,7 @@ TRAIN_ARGS=(
 
     --model_type "${MODEL_TYPE}"
     --v_scale_learnable "${V_SCALE_LEARNABLE}"
+    --v_scale_mode "${V_SCALE_MODE}"
 
     --vocab_size "${VOCAB_SIZE}"
     --hidden_size "${HIDDEN_SIZE}"
