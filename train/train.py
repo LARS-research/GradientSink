@@ -311,6 +311,7 @@ def build_model(args) -> torch.nn.Module:
             raise ImportError("modeling_vscale.VscaleForCausalLM is not available, but --model_type=vscale was requested.")
         config.model_type = "vscale"
         config.v_scale_learnable = args.v_scale_learnable
+        config.v_scale_mode = args.v_scale_mode
         model = VscaleForCausalLM(config)
     else:
         raise ValueError(f"Unknown model_type: {args.model_type}")
@@ -656,6 +657,7 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--tie_word_embeddings", type=str2bool, default=False)
     # Vscale
     p.add_argument("--v_scale_learnable", type=str2bool, default=True)
+    p.add_argument("--v_scale_mode", type=str, default="full", choices=["off", "full", "backward_only"])
 
     # Data
     p.add_argument("--tokenizer_path", type=str, required=True)
